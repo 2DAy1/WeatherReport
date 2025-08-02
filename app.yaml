@@ -1,0 +1,33 @@
+runtime: python311
+service: weather-reminder
+
+env_variables:
+  DJANGO_SETTINGS_MODULE: weather_reminder.settings
+  SECRET_KEY: "your-secret-key-here"
+  DEBUG: "False"
+  ALLOWED_HOSTS: ".appspot.com"
+  DATABASE_URL: "postgresql://user:password@host:port/db"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+  OPENWEATHER_API_KEY: "d8208cd60d4a1b353189c104ef58c9d0"
+  EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PORT: "587"
+  EMAIL_USE_TLS: "True"
+  EMAIL_HOST_USER: "davdad2007@gmail.com"
+  EMAIL_HOST_PASSWORD: "your-app-password"
+
+handlers:
+  - url: /static
+    static_dir: staticfiles/
+  - url: /.*
+    script: auto
+
+automatic_scaling:
+  target_cpu_utilization: 0.65
+  min_instances: 1
+  max_instances: 10
+
+resources:
+  cpu: 1
+  memory_gb: 0.5
+  disk_size_gb: 10 
