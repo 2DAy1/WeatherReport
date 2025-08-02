@@ -1,0 +1,19 @@
+Weather Update
+
+Hello {{ user.first_name|default:user.username }}!
+
+Current Weather in {{ city.name }}, {{ city.country }}
+
+Temperature: {{ weather.temperature }}°C
+Condition: {{ weather.description|title }}
+Humidity: {{ weather.humidity }}%
+Pressure: {{ weather.pressure }} hPa
+Wind Speed: {{ weather.wind_speed }} m/s
+
+This notification was sent based on your subscription settings:
+- Notification period: {{ subscription.get_notification_period_display }}
+- Notification type: {{ subscription.get_notification_type_display }}
+
+---
+This is an automated weather notification from DjangoWeatherReminder
+To manage your subscriptions, please log into your account. 
