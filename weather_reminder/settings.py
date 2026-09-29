@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 # Simple config function for environment variables
 def config(key, default=None, cast=None):
@@ -29,7 +30,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
-    'weather_app',
+    'weather.apps.WeatherConfig',
+    'subscriptions',
+    'accounts',
 ]
 
 MIDDLEWARE = [
@@ -70,6 +73,18 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+database_url = config('DATABASE_URL')
+if database_url:
+    database = urlparse(database_url)
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': unquote(database.path.lstrip('/')),
+        'USER': unquote(database.username or ''),
+        'PASSWORD': unquote(database.password or ''),
+        'HOST': database.hostname,
+        'PORT': database.port or 5432,
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -130,10 +145,10 @@ CELERY_TIMEZONE = TIME_ZONE
 
 # Weather API settings
 OPENWEATHER_API_KEY = config('OPENWEATHER_API_KEY', default='')
-WEATHERBIT_API_KEY = config('WEATHERBIT_API_KEY', default='')
 
 # Email settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='weather@localhost')
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
@@ -141,4 +156,4 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
 # Webhook settings
-WEBHOOK_TIMEOUT = 10  # seconds 
+WEBHOOK_TIMEOUT = 10  # seconds
