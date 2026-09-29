@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - DEBUG=True
       - SECRET_KEY=your-secret-key-here
@@ -15,11 +13,18 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
-      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+      - DEFAULT_FROM_EMAIL=weather@localhost
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/admin/login/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - weather_network
 
@@ -31,21 +36,27 @@ services:
       - POSTGRES_DB=weather_reminder
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-    ports:
-      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d weather_reminder"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - weather_network
 
   redis:
     image: redis:6-alpine
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - weather_network
 
   celery:
     build: .
-    command: celery -A weather_reminder worker -l info
+    command: celery -A weather_reminder worker -l info --concurrency=2
     volumes:
       - .:/app
     environment:
@@ -55,17 +66,19 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
-      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+      - DEFAULT_FROM_EMAIL=weather@localhost
     depends_on:
-      - db
-      - redis
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - weather_network
 
   celery-beat:
     build: .
-    command: celery -A weather_reminder beat -l info
+    command: celery -A weather_reminder beat -l info --schedule=/tmp/celerybeat-schedule
     volumes:
       - .:/app
     environment:
@@ -75,11 +88,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
-      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+      - DEFAULT_FROM_EMAIL=weather@localhost
     depends_on:
-      - db
-      - redis
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - weather_network
 
@@ -88,4 +103,4 @@ volumes:
 
 networks:
   weather_network:
-    driver: bridge 
+    driver: bridge

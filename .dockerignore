@@ -1,0 +1,11 @@
+.git
+.idea
+.venv
+venv
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+db.sqlite3*
+celerybeat-schedule*
+staticfiles

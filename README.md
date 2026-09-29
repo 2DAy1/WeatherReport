@@ -2,29 +2,34 @@
 
 A Django-based weather notification service that sends periodic weather updates to users via email and webhooks using Celery background tasks.
 
+The scheduler checks due subscriptions every minute. Each subscription has its own
+`next_run_at` and a 1, 3, 6, or 12 hour interval. Local Docker email delivery uses the
+console backend. See [notification scheduling](docs/notification-scheduling.md)
+for the task flow, tests, and delivery limitations.
+
 ## Features
 
 - **User Authentication**: JWT-based authentication system
-- **City Management**: Search and manage cities for weather monitoring
+- **Cities**: List and search cities available for weather monitoring
 - **Subscription System**: Users can subscribe to weather notifications for multiple cities
 - **Multiple Notification Types**: Email and webhook notifications
 - **Cost Optimization**: 
   - Caches weather data to avoid duplicate API calls
   - Groups notifications by city to minimize API requests
-  - Sends consolidated emails for multiple cities
 - **Background Processing**: Celery tasks for async weather fetching and notification sending
-- **Parallel Processing**: Weather API calls and email sending are parallelized
-- **Periodic Tasks**: Automated weather notifications every hour
-- **Docker Support**: Complete containerized deployment
+- **Parallel Processing**: Independent Celery tasks process weather requests and deliveries
+- **Periodic Tasks**: Checks due subscriptions every minute and respects their notification intervals
+- **Docker Support**: Local development with Docker Compose
 
 ## Architecture
 
-### Models
-- **User**: Django's built-in User model
-- **City**: Stores city information with coordinates
-- **Subscription**: User subscriptions to weather notifications
-- **WeatherData**: Cached weather data to optimize API calls
-- **NotificationLog**: Tracks notification delivery status
+### Django apps
+- **`accounts`**: user registration; authentication uses Django's built-in User and Simple JWT
+- **`weather`**: City, WeatherData, OpenWeatherMap request, weather and cleanup tasks
+- **`subscriptions`**: Subscription, NotificationLog, scheduling, email and webhook tasks
+- **`weather_reminder`**: Django settings, root routes, and Celery configuration
+
+The API paths remain unchanged. Historical migrations live in `weather/migrations/` under the retained Django label `weather_app`; the models use their existing database tables. See [architecture](docs/architecture.md) for the class diagram, module roles and migration design.
 
 ### Background Tasks
 - **Weather Data Fetching**: Parallel fetching from OpenWeatherMap API
@@ -36,7 +41,7 @@ A Django-based weather notification service that sends periodic weather updates 
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.12
 - Redis (for Celery broker)
 - PostgreSQL (optional, SQLite for development)
 
@@ -45,18 +50,18 @@ A Django-based weather notification service that sends periodic weather updates 
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd CursorWeatherReminder
+   cd djangoweatherreminder
    ```
 
 2. **Create virtual environment**
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   py -3.12 -m venv .venv
+   .venv\Scripts\Activate.ps1
    ```
 
 3. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    ```
 
 4. **Set up environment variables**
@@ -65,15 +70,13 @@ A Django-based weather notification service that sends periodic weather updates 
    SECRET_KEY=your-secret-key-here
    DEBUG=True
    OPENWEATHER_API_KEY=your-openweather-api-key
-   EMAIL_HOST_USER=your-email@gmail.com
-   EMAIL_HOST_PASSWORD=your-email-password
+   EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
    CELERY_BROKER_URL=redis://localhost:6379/0
    CELERY_RESULT_BACKEND=redis://localhost:6379/0
    ```
 
 5. **Run migrations**
    ```bash
-   python manage.py makemigrations
    python manage.py migrate
    ```
 
@@ -111,19 +114,16 @@ A Django-based weather notification service that sends periodic weather updates 
 
 ### Docker Deployment
 
-1. **Build and run with Docker Compose**
+1. **Add `OPENWEATHER_API_KEY` to `.env`, then build and run with Docker Compose**
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 
-2. **Run migrations in container**
-   ```bash
-   docker-compose exec web python manage.py migrate
-   ```
+   The `web` container applies migrations on startup.
 
-3. **Populate sample data**
+2. **Populate sample data**
    ```bash
-   docker-compose exec web python manage.py populate_data
+   docker compose exec web python manage.py populate_data
    ```
 
 ## API Documentation
@@ -209,7 +209,7 @@ Content-Type: application/json
 
 {
     "city": 1,
-    "notification_period": 2,
+    "notification_period": 3,
     "notification_type": "webhook",
     "webhook_url": "https://webhook.site/your-unique-url"
 }
@@ -257,31 +257,27 @@ Authorization: Bearer <your-access-token>
 - **Grouping**: Multiple users requesting the same city get the same cached data
 
 ### Email Optimization
-- **Consolidated Emails**: Users with multiple city subscriptions receive one email with all weather data
-- **Parallel Sending**: Email notifications are sent in parallel using Celery
+- **Console Email**: Local notifications appear in the Celery worker logs
+- **Independent Delivery**: Each email is queued as a Celery task
 
 ### Webhook Optimization
 - **Timeout Management**: Webhook requests have configurable timeouts
-- **Error Handling**: Failed webhook attempts are logged and can be retried
+- **Error Handling**: Failed webhook attempts are logged
 
 ## Background Tasks
 
 ### Periodic Tasks
-- **Hourly Notifications**: Sends weather notifications every hour
+- **Scheduled Notifications**: Checks subscriptions every minute; queues notifications when their 1, 3, 6, or 12 hour interval is due
 - **Daily Cleanup**: Removes weather data older than 7 days
 
 ### Manual Task Execution
 ```python
 # Fetch weather for a specific city
-from weather_app.tasks import fetch_weather_data_for_city
+from weather.tasks import fetch_weather_data_for_city
 fetch_weather_data_for_city.delay(city_id)
 
-# Send notifications for a user
-from weather_app.tasks import send_notifications_for_user
-send_notifications_for_user.delay(user_id)
-
 # Send bulk notifications
-from weather_app.tasks import send_bulk_notifications
+from subscriptions.tasks import send_bulk_notifications
 send_bulk_notifications.delay()
 ```
 
@@ -301,7 +297,13 @@ coverage report
 
 ## Deployment
 
-### Docker Deployment (Recommended)
+### Production Settings
+Update `settings.py` for production:
+- Set `DEBUG = False`
+- Configure proper database (PostgreSQL recommended)
+- Configure a real email backend when needed
+- Configure static files serving
+- Set secure `SECRET_KEY`
 
 1. **Build and run with Docker Compose**
    ```bash
@@ -428,4 +430,4 @@ CELERY_BROKER_URL=redis://redis:6379/0
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.
